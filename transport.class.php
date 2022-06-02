@@ -26,7 +26,7 @@ class Transport
  public $priceRd = 0.0;
  public $dateRd;
  public $errorRd;
- 
+
  public function __construct($base_url,$orderNum,$orderDate,$sourceKladr,$targetKladr,$weightKg)
   {
   $this->base_url = $base_url;
@@ -42,7 +42,6 @@ class Transport
   {return;}
   public function send($base_url,$orderNum,$orderDate,$sourceKladr,$targetKladr,$weightKg)
   {
-	  $this->trace .= ' send('.$base_url.', '.$orderNum.', '.$orderDate.', '.$sourceKladr.', '.$targetKladr.', '.$weightKg.'); ';
 	  if ($this->emulate($orderNum,$base_url,$sourceKladr,$targetKladr,$weightKg)) return true;
 	  else
 	  {
@@ -51,15 +50,13 @@ class Transport
 		return false;
 	  }
   }
-  
+
   public function receive($orderNum,$channel,$req_status)
   {
-	$this->trace .= ' receive('.$orderNum.', '.$channel.', '.$req_status.'); ';
 	if (!file_exists($channel))
 		{
 		$this->crush = 1;
 		$this->error .= ' Нет канала связи "'.$channel.'".';
-		$this->trace .= ' receive on exit: this->crush='.$this->crush.', this->error ='.$this->error.' exit = false ';
 		return false;
 		}
 		else
@@ -68,11 +65,8 @@ class Transport
 				{
 				$this->crush = 1;
 				$this->error .= ' Ошибка канала связи "'.$channel.'".';
-				$this->trace .= ' receive on exit: this->crush='.$this->crush.', this->error ='.$this->error.' exit = false ';
 				return false;
 				}
-			$this->trace .= ' receive on enter: $records = '.serialize($records).'  ';
-//			while (($record = fgets($fp)) !== false)
 			$this->crush = 0;
 			foreach ($records as $key=>$record)
 				{
@@ -82,36 +76,29 @@ class Transport
 					if (hrtime(true) >= $this->receive_time)
 						{
 						$this->commonView($record,$req_status,false);
-						
 						unset ($records[$key]);
-						if (!file_put_contents($channel,$records,LOCK_EX))
+						if (file_put_contents($channel,$records) === FALSE)
 							{
 							$this->crush = 0;
-							$this->error .= ' Канал связи "'.$channel.'" работает неправильно.';
+							$this->inform .= ' Канал связи "'.$channel.'" работает неправильно.';
 							}
-						$this->trace .= ' receive on exit: this->crush='.$this->crush.', this->error ='.$this->error.', exit = true ';
-						$this->trace .= ' receive on exit: $records = '.serialize($records).'  ';
 						return true;
 						}
-						else 
+						else
 							{
 							$this->inform = ' Данные по заказу '.$orderNum.' от канала связи "'.$channel.'" ещё не поступили.';
-							$this->trace .= ' receive on exit: this->crush='.$this->crush.', this->error ='.$this->error.', this->inform = '.$this->inform.', exit = false ';
 							return false;
 							}
 					}
 				}
-			$this->trace .= ' receive on exit: $records = '.serialize($records).'  ';
 			$this->crush = 1;
 			$this->error .= ' Нет данных по заказу '.$orderNum.' на запрос к "'.$channel.'".';
-			$this->trace .= ' receive on exit: this->crush='.$this->crush.', this->error ='.$this->error.', exit = false ';
 			return false;
 		  }
   }
-  
+
   protected function sendrec($channel,$jsonRec)
  {
-	$this->trace .= ' sendrec('.$channel.', '.$jsonRec.'); ';
 	if (!$file=fopen( $channel, 'a+')) return FALSE;
 	if (fwrite($file, $jsonRec.PHP_EOL) === FALSE) return FALSE;
 	fclose($file);
@@ -127,15 +114,14 @@ class TransportStandard extends Transport
  public $basePrice = 150.0;
  public $coefficient = 0.0;
 
- 
+
  public function __construct($base_url,$orderNum,$orderDate,$sourceKladr,$targetKladr,$weightKg)
   {
   parent::__construct($base_url,$orderNum,$orderDate,$sourceKladr,$targetKladr,$weightKg);
   }
  public function emulate($orderNum,$base_url,$sourceKladr,$targetKladr,$weightKg)
  {
-	$this->trace .= ' TransportStandard::emulate('.$orderNum.', '.$base_url.', '.$sourceKladr.', '.$targetKladr.', '.$weightKg.'); ';
-	$this->error = (rand(0,100)>90)? ' Emulated error.':'';
+	$this->error = (rand(0,100)>80)? ' Emulated error.':'';
 	if (empty($this->error))
 	{
 	$this->coefficient = floatval(rand(1, 50).".".rand(0, 99));
@@ -149,7 +135,7 @@ class TransportStandard extends Transport
 	$this->jsonRec = json_encode(array(
 	"orderNum"=>$orderNum,
 	"base_url"=>$base_url,
-	"coefficient"=>$this->coefficient, 
+	"coefficient"=>$this->coefficient,
 	"custom_date"=>$custom_date,
 	"error"=>$this->error ),JSON_NUMERIC_CHECK);
 	$this->channel = $this->path.$base_url;
@@ -159,14 +145,12 @@ class TransportStandard extends Transport
 
  public function commonView($jsonRec,$stat,$num=true)
  {
-	$this->trace .= ' TransportStandard::commonView('.$jsonRec.','.$stat.', '.$num.'); ';
 	$calcAr = json_decode($jsonRec,TRUE);
 	$this->orderNumRd = $calcAr['orderNum'];
 	if ($num) return $this->orderNumRd;
 	if ($stat>1) return true;
 	$this->base_urlRd = $calcAr['base_url'];
 	$this->priceRd = floatval($calcAr['coefficient'])*floatval($this->basePrice);
-	$this->trace .= ' TransportStandard::commonView on exit $this->priceRd = '.$this->priceRd;
 	$this->custom_date = date("Y-m-d",strtotime($this->orderDate)+(int)$calcAr['custom_date']);
 	$this->errorRd = $calcAr['error'];
 	return true;
@@ -177,7 +161,7 @@ class TransportStandard extends Transport
 class TransportFast extends Transport
 {
  private $period = 0;
- 
+
  public function __construct($base_url,$orderNum,$orderDate,$sourceKladr,$targetKladr,$weightKg)
  {
  parent::__construct($base_url,$orderNum,$orderDate,$sourceKladr,$targetKladr,$weightKg);
@@ -185,7 +169,7 @@ class TransportFast extends Transport
  public function emulate($orderNum,$base_url,$sourceKladr,$targetKladr,$weightKg)
  {
 	$this->trace .= ' TransportFast::emulate('.$orderNum.', '.$base_url.', '.$sourceKladr.', '.$targetKladr.', '.$weightKg.'); ';
-	$this->error = rand(0,100)>90 ? ' Emulated error.':'';
+	$this->error = rand(0,100)>80 ? ' Emulated error.':'';
 	if ($this->error == '')
 	{
 	$this->price = rand(150, 5000).".".rand(0, 99);
@@ -199,17 +183,16 @@ class TransportFast extends Transport
 	$this->jsonRec = json_encode( array(
 	"orderNum"=>$orderNum,
 	"base_url"=>$base_url,
-	"price"=>$this->price, 
+	"price"=>$this->price,
 	"period"=>$period,
 	"error"=>$this->error),JSON_NUMERIC_CHECK);
 	$this->channel = $this->path.$base_url;
 	if($this->sendrec($this->channel,$this->jsonRec))return TRUE;
 	else return FALSE;
  }
- 
+
  public function commonView($jsonRec,$stat,$num=true)
  {
- $this->trace .= ' TransportFast::commonView('.$jsonRec.', '.$stat.', '.$num.'); ';
  $calcAr = json_decode($jsonRec,TRUE);
  $this->orderNumRd = $calcAr['orderNum'];
  if ($num) return $this->orderNumRd;

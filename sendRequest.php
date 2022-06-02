@@ -31,17 +31,19 @@ function linkBase(&$mysqli)
 
 function getRecOrd(&$mysqli)
   {
-   if(!($res = $mysqli->query("SELECT * FROM `orders` AS `o` INNER JOIN `agents` AS `a` ON `a`.`id` = `o`.`agent_id`")))
+   if(!($res = $mysqli->query("SELECT * FROM `orders` AS `o` LEFT JOIN `agents` AS `a` ON `a`.`id` = `o`.`agent_id`")))
    	return "Error: ".$mysqli->error;
     else
 	{
 	$repl = '';
 	while ($val=$res->fetch_assoc())
 		{
+		if ($val['selected'] === 'Y') $tail = "; срок = ".$val['custom_date']."; исполнитель: \"".$val['agent_name']."\"<b> -- назначен --</b>";
+			else $tail = "";
 		if ($val['agent_name'])
-			$repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; срок = ".$val['custom_date']."; исполнитель: \"".$val['agent_name']."\"??";
+			$repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; ".$val['from']." -> ".$val['to']."; вес = ".$val['weight']." кг; тариф: ".$val['timeSelect'].$tail."??";
 		else
-			$repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; срок = ".$val['custom_date']."; исполнитель: Не назначен??";
+			$repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; ".$val['from']." -> ".$val['to']."; вес = ".$val['weight']." кг; тариф: ".$val['timeSelect']."; исполнитель: Не подобран.??";
 		}
 	$res->free();
 	return $repl; 
@@ -64,7 +66,12 @@ function getRecCalc($mysqli)
 		if ($val['err'] == 'no' && $val['inform'] == 'OK!')
 			$repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; ".$val['from']." --) ".$val['to']."; вес = ".$val['weight']." кг; тариф: ".$val['timeSelect'].", исполнитель: \"".$val['agent_name']."\", дата выполнения: ".$val['cust_d'].", стоимость = ".$val['price']." руб.??";
 		  elseif ($val['err'] == 'no')
+		  {
+			if ($val['price'] == 0)
 				$repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; ".$val['from']." --) ".$val['to']."; вес = ".$val['weight']." кг; тариф: ".$val['timeSelect'].", исполнитель: \"".$val['agent_name']."\" - ".$val['inform']."??";
+				else 
+					$repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; ".$val['from']." --) ".$val['to']."; вес = ".$val['weight']." кг; тариф: ".$val['timeSelect'].", исполнитель: \"".$val['agent_name']."\", дата выполнения: ".$val['cust_d'].", стоимость = ".$val['price']." руб. - ".$val['inform']."??";
+		  }	
 		  else $repl .= "Заказчик: \"".$val['customer']."\"; № заказа = ".$val['orderNum']."; ".$val['from']." --) ".$val['to']."; вес = ".$val['weight']." кг; тариф: ".$val['timeSelect'].", исполнитель: \"".$val['agent_name']."\", ОШИБКА: ".$val['err']."??";
 		}
 	$res->free();
@@ -76,12 +83,15 @@ function getRecCalc($mysqli)
   {
 	global $repl;
 	mem('listing ...$count = '.$count);
-	$code = "!!%function execf(){parEl = document.getElementById('".$list."');
+	$code = "!!%function execf(){
+		parEl = document.getElementById('".$list."');
 	if (parEl) 
+	{
 		while (parEl.firstChild) 
-			{parEl.firstChild.remove();
-		};
-	parEl.style.display = 'block';";
+			{
+				parEl.firstChild.remove();
+			}
+		parEl.style.display = 'block';";
 	if($prime != '')
 		$code .= "newEl=document.createElement('li'); newEl.innerHTML = 'Error: ".$prime."'; parEl.append(newEl);";
 	$replica = ($list == 'calculation')? getRecCalc($mysqli):getRecOrd($mysqli);
@@ -95,6 +105,8 @@ function getRecCalc($mysqli)
 	   else
 		{
 		$lines = explode('??', $replica);
+		unset ($lines[count($lines)-1]);
+		$code .= "console.log('count(lines) = '+".count($lines)."); ";
 		for ($i=0; $i < count($lines); $i++)
 			{
 			if (strlen($lines[$i]) === 0) continue;
@@ -107,11 +119,15 @@ function getRecCalc($mysqli)
 	if ($count != -1)
 	{
 	$code .= "
+	}
 	prEl = document.getElementById('process');
 	prEl.style.display = 'block';
-	prEl.querySelector('input').value = '".$count."'; return true;}!!";
+	prEl.querySelector('input').value = '".$count."'; return true; }!!";
 	}
-	else $code .= "return true;}!!";
+	else
+	$code .= " return true; }
+	else
+		return false;}!!";
 	$repl .= $code;
 	mem($repl);
 	echo $repl;
@@ -134,23 +150,14 @@ function getRecCalc($mysqli)
 	function polling(&$transp,$mysqli)
 	{
 	 mem('polling...');
-//	 $query = "SELECT * FROM `calculations`";
-//	 mem('$query = '.$query);
-//	 if(!($res = $mysqli->query($query)))
-//		return "??Error: ".$mysqli->error;
-//	 $val=$res->fetch_assoc();
 	 mem(' $transp: (0) = '.serialize($transp[0]));
 	 mem(' $transp: (1) = '.serialize($transp[1]));
 	 mem(' $transp: (2) = '.serialize($transp[2]));
 	 $trLength = count($transp);
 	 mem(' count($transp) = '.$trLength);
-//	 $timeout = $val['receive_time'];
-//	 mem('time = '.hrtime(true));
-//	 mem(' $timeout = '.$timeout);
 	 while($trLength > 0)
 	 {
 	 mem(' 1-st cycle ...');
-//	 mem('time = '.hrtime(true));
 	 $flag = 0;
 	 foreach($transp as $key=>$tranObj)
 		 {
@@ -182,13 +189,11 @@ function getRecCalc($mysqli)
 		 mem('$tranObj->error = '.$error);
 		 mem('$tranObj->crush = '.$tranObj->crush);
 		 $tranObj->error='';
-		 $error = (empty($error) OR $tranObj->crush === 0)? 'no':$error;
+		 $error = (empty($error))? 'no':$error;
 		 $status = 1;
 		 mem(' count($transp) = '.$trLength);
-//		 mem('$tranObj->receive_time = '.$tranObj->receive_time.', hrtime(true) = '.hrtime(true).', dif = '.intval($tranObj->receive_time)-hrtime(true));
 		 if ($exit === true OR $tranObj->crush === 1)
 			{
-			unset($transp[$key]);
 			$flag++;
 			$status++;
 			}
@@ -197,10 +202,13 @@ function getRecCalc($mysqli)
 		 $query = "UPDATE `calculations` SET `req_status`=".$status.", `custom_date`='".$tranObj->custom_date."', `price`='".$price."', `error`='".$error."', `inform`='".$tranObj->inform."' WHERE `orderNum`=".$tranObj->orderNum." AND `timeSelect`='".$valag['speed_Mode']."'";
 		 mem($query);
 		 $tranObj->inform = '';
+		 if ($exit === true OR $status === 2)
+			{
+			unset($transp[$key]);
+			}
+		 $trLength = count($transp);
 		 if(!($mysqli->query($query)))
 			{mem("Error: ".$mysqli->error); continue;}
-//		 unlink($path);
-		 $trLength = count($transp);
 		 if ($flag != 0) listing($mysqli,'','calculation',$trLength);
 		 }
 	 }
@@ -269,12 +277,13 @@ if (!$mysqli->query ($query))
 					$transp[$trCnt]= $t = new TransportFast($valtr['base_url'],$val['orderNum'],$val['order_date'],$val['from'],$val['to'],$val['weight']);
 					if (!$t->send($t->base_url,$t->orderNum,$t->orderDate,$t->sourceKladr,$t->targetKladr,$t->weightKg)) 
 						{
-					//	printMes($mysqli,$t->$error,'calculation');
+						printMes($mysqli,$t->$error,'calculation');
 						mem ($t->$error.$t->$trace);
 						unset($transp[$trCnt]);
 						}
 						else 
-						{	
+						{
+						mem ('$t->$error = '.$t->$error.'; '.$t->$trace);
 						$error = $t->error;
 						$error = ($error == '')? 'no':$error;
 						mem(serialize($transp[$trCnt]));
@@ -307,12 +316,15 @@ if (!$mysqli->query ($query))
 						mem('for "standard" $t->orderNum = '.$t->orderNum);
 						if (!$t->send($t->base_url,$t->orderNum,$t->orderDate,$t->sourceKladr,$t->targetKladr,$t->weightKg)) 
 							{mem($t->$error.$t->trace);
-							// printMes($mysqli,$t->$error,'calculation');
+							printMes($mysqli,$t->$error,'calculation');
 							unset($transp[$trCnt]);
 							}
 							else 
-							{	
+							{
+							mem ('$t->$error = '.$t->$error.'; '.$t->$trace);
 							mem(serialize($transp[$trCnt]));
+							$error = $t->error;
+							$error = ($error == '')? 'no':$error;
 							$query = "INSERT IGNORE INTO `calculations` (`orderNum`,`timeSelect`,`receive_time`, `agent_name`, `error`) VALUES (".$val['orderNum'].", '".$valtr['speed_Mode']."', ".$t->receive_time.", '".$valtr['agent_name']."', '".$error."')"; 
 							mem($query);
 							if(!($mysqli->query($query)))
@@ -328,8 +340,8 @@ if (!$mysqli->query ($query))
 				$restr->free();
 				break;
 			}
-//		$query = "UPDATE `orders` SET `was_read`=1 WHERE `orderNum`=".$val['orderNum'];
-//		if(!$mysqli->query($query)) { $repl .= '??Error: '.$mysqli->error;}
+		$query = "UPDATE `orders` SET `was_read`=1 WHERE `orderNum`=".$val['orderNum'];
+		if(!$mysqli->query($query)) { $repl .= '??Error: '.$mysqli->error;}
 		}
 	$res->free;
 	polling($transp,$mysqli);
@@ -337,7 +349,7 @@ if (!$mysqli->query ($query))
 	}
 	case 'restart':
 	{
-	$query="SELECT `c`.*, `a`.`base_url`, `o`.* FROM `calculations` AS `c` INNER JOIN `agents` AS `a` ON `c`.`agent_name`=`a`.`agent_name` LEFT JOIN `orders` AS `o` ON IF(`o`.`timeSelect` = 'all',`o`.`orderNum`=`c`.`orderNum`,(`o`.`orderNum`=`c`.`orderNum` AND `o`.`timeSelect`=`c`.`timeSelect`)) WHERE `c`.`req_status`<2";
+	$query="SELECT `c`.*, `a`.`base_url`, `o`.`orderNum` AS `ordN`, `o`.`order_date`,`o`.`from`, `o`.`to`, `o`.`weight`, `o`.`timeSelect` AS `timeS` FROM `calculations` AS `c` INNER JOIN `agents` AS `a` ON `c`.`agent_name`=`a`.`agent_name` LEFT JOIN `orders` AS `o` ON IF(`o`.`timeSelect` = 'all',`o`.`orderNum`=`c`.`orderNum`,(`o`.`orderNum`=`c`.`orderNum` AND `o`.`timeSelect`=`c`.`timeSelect`)) WHERE `c`.`req_status`<2";
 	mem($query);
 	if(!($res = $mysqli->query($query))) {mem(' $res '); break;}
 	require_once 'transport.class.php';
@@ -372,31 +384,34 @@ if (!$mysqli->query ($query))
 	{
 		if (!empty($_POST['orderLine']))
 			$orderLine = $_POST['orderLine'];
-			mem ('$orderLine = '.$orderLine);
+//			mem ('$orderLine = '.$orderLine);
 			$ststart = mb_strpos( $orderLine , "№ заказа = ")+11;
-			mem ('№ заказа $ststart = '.$ststart);
+//			mem ('№ заказа $ststart = '.$ststart);
 			$length = mb_strpos( $orderLine , ";",$ststart)-$ststart;
-			mem ('заказ $length = '.$length);
+//			mem ('заказ $length = '.$length);
 			$orderNum = (int)trim(mb_substr ( $orderLine , $ststart ,$length));
-			mem ('$orderNum = '.$orderNum);
+//			mem ('$orderNum = '.$orderNum);
 			$ststart = mb_strpos( $orderLine , "Заказчик: ")+11;
-			mem ('Заказчик $ststart = '.$ststart);
+//			mem ('Заказчик $ststart = '.$ststart);
 			$length = mb_strpos( $orderLine , '"',$ststart)-$ststart;
-			mem ('Заказчик $length = '.$length);
+//			mem ('Заказчик $length = '.$length);
 			$customer = trim(mb_substr ( $orderLine , $ststart ,$length));
-			mem ('Заказчик = '.$customer);
+//			mem ('Заказчик = '.$customer);
 			$ststart = mb_strpos( $orderLine , 'исполнитель: "')+14;
-			mem ('исполнитель $ststart = '.$ststart);
+//			mem ('исполнитель $ststart = '.$ststart);
 			$length = mb_strpos( $orderLine , '"',$ststart)-$ststart;
-			mem ('исполнитель $length = '.$length);
+//			mem ('исполнитель $length = '.$length);
 			$agent_name = trim(mb_substr ( $orderLine , $ststart ,$length));
-			mem ('исполнитель $agent_name = '.$agent_name);
-//			$query = "UPDATE `orders` AS `o`, (SELECT `a`.`agent_name` AS `agn`, `c`.* FROM `agents` AS `a` LEFT JOIN `calculations` AS `c` ON `a`.`agn` = '".$agent_name."' AND `c`.`agent_name` = `a`.`agn` AND `c`.`orderNum` = ".$orderNum.") AS `j` SET `o`.`custom_date`= `j`.`custom_date`, `o`.`agent_id`= `j`.`id` WHERE `o`.`orderNum`=".$orderNum;
-//			$query = "UPDATE `orders` AS `o`, (SELECT `a`.`agent_name` AS `agn` FROM `agents` AS `a` INNER JOIN `calculations` AS `c` ON `agn` = '".$agent_name."' AND `c`.`agent_name` = `agn` WHERE `c`.`orderNum` = ".$orderNum.") AS `j` SET `o`.`custom_date`= `j`.`custom_date`, `o`.`agent_id`= `j`.`id` WHERE `o`.`orderNum`=".$orderNum;
-			$query = "UPDATE `orders` AS `o` SET `o`.`custom_date`= (SELECT `custom_date` FROM `calculations` WHERE `orderNum` = ".$orderNum." AND `agent_name`= '".$agent_name."'), `o`.`agent_id`= (SELECT `id` FROM `agents` WHERE `agent_name`= '".$agent_name."') WHERE `o`.`customer`='".$customer."'";
+//			mem ('исполнитель $agent_name = '.$agent_name);
+			$query = "UPDATE `orders` AS `o` SET `o`.`custom_date`= (SELECT `custom_date` FROM `calculations` WHERE `orderNum` = ".$orderNum." AND `agent_name`= '".$agent_name."'), `o`.`agent_id`= (SELECT `id` FROM `agents` WHERE `agent_name`= '".$agent_name."'), `selected`='Y' WHERE `o`.`customer`='".$customer."' AND `orderNum` = ".$orderNum;
 			mem ('$query = '.$query);
 			if(!$mysqli->query($query)) { mem('??Error: '.$mysqli->error);}
 			listing($mysqli,'','orderList',-1);
+		break;
+	}
+	case 'demo':
+	{
+			listing($mysqli,'','calculation',-1);
 		break;
 	}
  }
